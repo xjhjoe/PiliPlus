@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
 import 'package:PiliPlus/common/widgets/loading_widget/loading_widget.dart';
 import 'package:PiliPlus/common/widgets/scaffold/simple_scaffold.dart';
 import 'package:PiliPlus/common/widgets/view_sliver_safe_area.dart';
 import 'package:dlna_dart/dlna.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -16,6 +18,7 @@ class DLNAPage extends StatefulWidget {
 }
 
 class _DLNAPageState extends State<DLNAPage> {
+  static const _localNetwork = MethodChannel('piliplus/local_network');
   final _searcher = DLNAManager();
   final Map<String, DLNADevice> _deviceList = {};
   late final _url = Get.parameters['url']!;
@@ -23,6 +26,7 @@ class _DLNAPageState extends State<DLNAPage> {
 
   Timer? _timer;
   bool _isSearching = false;
+  bool _permissionDenied = false;
   DLNADevice? _lastDevice;
   String? _lastDeviceKey;
 
@@ -40,6 +44,26 @@ class _DLNAPageState extends State<DLNAPage> {
       _deviceList.clear();
       setState(() {});
     }
+    if (Platform.isAndroid) {
+      bool granted;
+      try {
+        granted = await _localNetwork.invokeMethod<bool>('requestPermission') ?? false;
+      } on PlatformException {
+        granted = false;
+      }
+      if (!mounted) {
+        _isSearching = false;
+        return;
+      }
+      if (!granted) {
+        setState(() {
+          _permissionDenied = true;
+          _isSearching = false;
+        });
+        return;
+      }
+    }
+    _permissionDenied = false;
     final deviceManager = await _searcher.start();
     if (!mounted) {
       return;
@@ -95,7 +119,7 @@ class _DLNAPageState extends State<DLNAPage> {
   Widget _buildBody(ColorScheme colorScheme) {
     if (!_isSearching && _deviceList.isEmpty) {
       return HttpError(
-        errMsg: '没有设备',
+        errMsg: _permissionDenied ? '请允许 PiliPlus 访问局域网后重试' : '没有设备',
         onReload: _onSearch,
       );
     }
