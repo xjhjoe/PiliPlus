@@ -1587,6 +1587,7 @@ class VideoDetailController extends GetxController
         return;
       }
       final url = VideoUtils.getCdnUrl(first.playUrls);
+      final format = response.format;
 
       String? title;
       try {
@@ -1608,6 +1609,7 @@ class VideoDetailController extends GetxController
         parameters: {
           'url': url,
           'title': ?title,
+          'format': ?format,
         },
       );
     } else {
