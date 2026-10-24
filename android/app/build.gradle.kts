@@ -66,11 +66,15 @@ android {
         }
         release {
             if (project.hasProperty("dev")) {
-                applicationIdSuffix = ".dev"
+                // GitHub-hosted runners use a fresh debug signing key each run.
+                // Give the Samsung DLNA test a distinct application ID so it
+                // installs alongside earlier .dev builds without data loss.
+                val samsungTest = project.hasProperty("samsungTest")
+                applicationIdSuffix = if (samsungTest) ".dev.samsungv3" else ".dev"
                 resValue(
                     type = "string",
                     name = "app_name",
-                    value = "PiliPlus dev",
+                    value = if (samsungTest) "PiliPlus Samsung v3" else "PiliPlus dev",
                 )
             }
 //            proguardFiles(
