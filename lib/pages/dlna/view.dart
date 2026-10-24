@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:PiliPlus/common/widgets/loading_widget/http_error.dart';
@@ -63,6 +64,31 @@ class _DLNAPageState extends State<DLNAPage> {
         .replaceAll(RegExp(r'https?://[^\s<>"]+'), '[URL]');
     final brief = detail.length > 160 ? '${detail.substring(0, 160)}…' : detail;
     return '$stage：${error.runtimeType}：$brief';
+  }
+
+
+  bool _isDangbei(DLNADevice device) {
+    final name = device.info.friendlyName.toLowerCase();
+    return name.contains('当贝') || name.contains('dangbei');
+  }
+
+  bool _isDangbeiProtocolError(Object error) {
+    return RegExp(r'<errorCode>(501|704|714|716)</errorCode>')
+        .hasMatch(error.toString());
+  }
+
+  Future<void> _setUrlWithoutMetadata(DLNADevice device) async {
+    final xml = XmlText.setPlayURLXml(
+      _url, title: _title ?? '', type: _videoMime,
+    );
+    final pattern = RegExp(
+      r'<CurrentURIMetaData>.*?</CurrentURIMetaData>', dotAll: true,
+    );
+    if (!pattern.hasMatch(xml)) throw StateError('Missing DLNA metadata');
+    final minimal = xml.replaceFirst(
+      pattern, '<CurrentURIMetaData></CurrentURIMetaData>',
+    );
+    await device.request('SetAVTransportURI', utf8.encode(minimal));
   }
 
   Future<void> _castTo(String key, DLNADevice device) async {
