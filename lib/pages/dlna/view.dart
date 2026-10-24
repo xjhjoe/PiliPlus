@@ -47,15 +47,22 @@ class _DLNAPageState extends State<DLNAPage> {
     return VideoMime.any;
   }
 
-  String _castFailure(Object error) {
-    if (error is TimeoutException) return '设备响应超时，请重试';
+  String _castFailure(Object error, String stage) {
+    if (error is TimeoutException) return '$stage：设备响应超时，请重试';
     final message = error.toString();
     final upnpCode = RegExp(r'<errorCode>(\d+)</errorCode>').firstMatch(message);
-    if (upnpCode != null) return '设备拒绝播放（UPnP ${upnpCode.group(1)}）';
+    if (upnpCode != null) {
+      final code = upnpCode.group(1);
+      return '$stage：设备返回 UPnP $code（${code == '501' ? '播放操作失败' : '协议错误'}）';
+    }
     final httpCode = RegExp(r'status (\d+)').firstMatch(message);
-    if (httpCode != null) return '设备返回 HTTP ${httpCode.group(1)}';
-    if (error is SocketException) return '无法连接设备，请检查电视和手机网络';
-    return '设备未接受播放命令（${error.runtimeType}）';
+    if (httpCode != null) return '$stage：设备返回 HTTP ${httpCode.group(1)}';
+    if (error is SocketException) return '$stage：无法连接设备，请检查电视和手机网络';
+    // Keep error specifics visible, but avoid printing signed video CDN URLs.
+    final detail = (error is StateError ? error.message : message)
+        .replaceAll(RegExp(r'https?://[^\s<>"]+'), '[URL]');
+    final brief = detail.length > 160 ? '${detail.substring(0, 160)}…' : detail;
+    return '$stage：${error.runtimeType}：$brief';
   }
 
   Future<void> _castTo(String key, DLNADevice device) async {
@@ -66,10 +73,21 @@ class _DLNAPageState extends State<DLNAPage> {
       _castError = null;
       _castErrorKey = null;
     });
+    var stage = '发送视频地址';
     try {
+      // Some renderers require a Stop before SetAVTransportURI.
+      // Ignore Stop failures when the device is already idle.
+      try {
+        await device.stop().timeout(const Duration(seconds: 2));
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() => _castStage = '正在发送视频地址…（${_videoMime.name}）');
       await device.setUrl(_url, title: _title ?? '', type: _videoMime);
       if (!mounted) return;
+      stage = '请求电视播放';
       setState(() => _castStage = '正在请求电视播放…');
+      // Give the renderer time to process the new AVTransport URI.
+      await Future<void>.delayed(const Duration(milliseconds: 350));
       await device.play();
       if (!mounted) return;
       setState(() {
@@ -80,7 +98,7 @@ class _DLNAPageState extends State<DLNAPage> {
       if (mounted) {
         setState(() {
           _castStage = null;
-          _castError = _castFailure(error);
+          _castError = _castFailure(error, stage);
           _castErrorKey = key;
         });
       }
@@ -204,6 +222,7 @@ class _DLNAPageState extends State<DLNAPage> {
                   : _castError != null && key == _castErrorKey
                   ? _castError!
                   : key,
+              maxLines: 4,
             ),
             trailing: isCasting
                 ? const SizedBox.square(
