@@ -100,31 +100,56 @@ class _DLNAPageState extends State<DLNAPage> {
       _castErrorKey = null;
     });
     var stage = '发送视频地址';
+    final dangbei = _isDangbei(device);
+    final modes = <int>[
+      0,
+      if (dangbei && _videoMime != VideoMime.any) 1,
+      if (dangbei) 2,
+    ];
     try {
-      // Some renderers require a Stop before SetAVTransportURI.
-      // Ignore Stop failures when the device is already idle.
       try {
         await device.stop().timeout(const Duration(seconds: 2));
       } catch (_) {}
-      if (!mounted) return;
-      setState(() => _castStage = '正在发送视频地址…（${_videoMime.name}）');
-      await device.setUrl(_url, title: _title ?? '', type: _videoMime);
-      if (!mounted) return;
-      stage = '请求电视播放';
-      setState(() => _castStage = '正在请求电视播放…');
-      // Give the renderer time to process the new AVTransport URI.
-      await Future<void>.delayed(const Duration(milliseconds: 350));
-      await device.play();
-      if (!mounted) return;
-      setState(() {
-        _lastDeviceKey = key;
-        _castStage = '已发送（${_videoMime.name}）；无画面可再次点按重试';
-      });
-    } catch (error) {
-      if (mounted) {
+      Object? lastError;
+      for (final mode in modes) {
+        if (!mounted) return;
+        final modeName = switch (mode) {
+          1 => '通用媒体声明',
+          2 => '简化媒体元数据',
+          _ => '标准模式',
+        };
+        try {
+          stage = '发送视频地址（$modeName）';
+          setState(() => _castStage = '正在发送视频地址（$modeName）…');
+          if (mode == 2) {
+            await _setUrlWithoutMetadata(device);
+          } else {
+            await device.setUrl(
+              _url, title: _title ?? '',
+              type: mode == 1 ? VideoMime.any : _videoMime,
+            );
+          }
+          if (!mounted) return;
+          stage = '请求电视播放（$modeName）';
+          setState(() => _castStage = '正在请求电视播放（$modeName）…');
+          await Future<void>.delayed(const Duration(milliseconds: 350));
+          await device.play();
+          if (!mounted) return;
+          setState(() {
+            _lastDeviceKey = key;
+            _castStage = '已发送（$modeName）；无画面可再次点按重试';
+          });
+          return;
+        } catch (error) {
+          lastError = error;
+          if (!dangbei || !_isDangbeiProtocolError(error)) break;
+          await Future<void>.delayed(const Duration(milliseconds: 350));
+        }
+      }
+      if (mounted && lastError != null) {
         setState(() {
           _castStage = null;
-          _castError = _castFailure(error, stage);
+          _castError = _castFailure(lastError!, stage);
           _castErrorKey = key;
         });
       }
