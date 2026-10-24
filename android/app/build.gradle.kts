@@ -70,11 +70,11 @@ android {
                 // Give the Samsung DLNA test a distinct application ID so it
                 // installs alongside earlier .dev builds without data loss.
                 val samsungTest = project.hasProperty("samsungTest")
-                applicationIdSuffix = if (samsungTest) ".dev.samsungv3" else ".dev"
+                applicationIdSuffix = if (project.hasProperty("dangbeiTest")) ".dev.dangbeiv4" else if (samsungTest) ".dev.samsungv3" else ".dev"
                 resValue(
                     type = "string",
                     name = "app_name",
-                    value = if (samsungTest) "PiliPlus Samsung v3" else "PiliPlus dev",
+                    value = if (project.hasProperty("dangbeiTest")) "PiliPlus Dangbei v4" else if (samsungTest) "PiliPlus Samsung v3" else "PiliPlus dev",
                 )
             }
 //            proguardFiles(
