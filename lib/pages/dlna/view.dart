@@ -67,6 +67,59 @@ class _DLNAPageState extends State<DLNAPage> {
   }
 
 
+
+  bool _isXiaomi(DLNADevice device) {
+    final name = device.info.friendlyName.toLowerCase();
+    return name.contains('小米') || name.contains('xiaomi') ||
+        name.contains('mi tv');
+  }
+
+  bool _isConnectionDropped(Object error) {
+    final msg = error.toString().toLowerCase();
+    return msg.contains('connection closed before full header') ||
+        msg.contains('connection reset by peer') ||
+        msg.contains('connection terminated before');
+  }
+
+  Future<void> _setUrlXiaomiFresh(DLNADevice device) async {
+    // A fresh one-off client avoids a stale DLNA HTTP keep-alive socket.
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 8);
+    try {
+      final request = await client
+          .postUrl(Uri.parse(device.controlURL('AVTransport')))
+          .timeout(const Duration(seconds: 8));
+      request.persistentConnection = false;
+      request.headers.set(
+        HttpHeaders.contentTypeHeader, 'text/xml; charset="utf-8"',
+      );
+      request.headers.set(
+        'SOAPAction',
+        '"urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI"',
+      );
+      final payload = utf8.encode(
+        XmlText.setPlayURLXml(_url, title: _title ?? '', type: _videoMime),
+      );
+      request.contentLength = payload.length;
+      request.add(payload);
+      final response =
+          await request.close().timeout(const Duration(seconds: 10));
+      final responseBody = await response
+          .transform(utf8.decoder)
+          .join()
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode != HttpStatus.ok) {
+        final code = RegExp(r'<errorCode>(\d+)</errorCode>')
+            .firstMatch(responseBody)?.group(1);
+        throw HttpException(
+          '设备返回 HTTP ${response.statusCode}${code == null ? '' : ' / UPnP $code'}',
+        );
+      }
+    } finally {
+      client.close(force: true);
+    }
+  }
+
   bool _isDangbei(DLNADevice device) {
     final name = device.info.friendlyName.toLowerCase();
     return name.contains('当贝') || name.contains('dangbei');
@@ -101,15 +154,18 @@ class _DLNAPageState extends State<DLNAPage> {
     });
     var stage = '发送视频地址';
     final dangbei = _isDangbei(device);
+    final xiaomi = _isXiaomi(device);
     final modes = <int>[
       0,
       if (dangbei && _videoMime != VideoMime.any) 1,
       if (dangbei) 2,
     ];
     try {
-      try {
-        await device.stop().timeout(const Duration(seconds: 2));
-      } catch (_) {}
+      if (!xiaomi) {
+        try {
+          await device.stop().timeout(const Duration(seconds: 2));
+        } catch (_) {}
+      }
       Object? lastError;
       for (final mode in modes) {
         if (!mounted) return;
@@ -124,10 +180,22 @@ class _DLNAPageState extends State<DLNAPage> {
           if (mode == 2) {
             await _setUrlWithoutMetadata(device);
           } else {
-            await device.setUrl(
-              _url, title: _title ?? '',
-              type: mode == 1 ? VideoMime.any : _videoMime,
-            );
+            try {
+              await device.setUrl(
+                _url, title: _title ?? '',
+                type: mode == 1 ? VideoMime.any : _videoMime,
+              );
+            } catch (error) {
+              if (!xiaomi || !_isConnectionDropped(error)) rethrow;
+              stage = '发送视频地址（小米备用连接）';
+              if (mounted) {
+                setState(() => _castStage = '小米电视断开连接，正在重试…');
+              }
+              await Future<void>.delayed(
+                const Duration(milliseconds: 450),
+              );
+              await _setUrlXiaomiFresh(device);
+            }
           }
           if (!mounted) return;
           stage = '请求电视播放（$modeName）';
