@@ -38,6 +38,7 @@ import 'package:PiliPlus/pages/audio/view.dart';
 import 'package:PiliPlus/pages/common/publish/publish_route.dart';
 import 'package:PiliPlus/pages/search/widgets/search_text.dart';
 import 'package:PiliPlus/pages/sponsor_block/block_mixin.dart';
+import 'package:PiliPlus/pages/dlna/cast_queue.dart';
 import 'package:PiliPlus/pages/video/download_panel/view.dart';
 import 'package:PiliPlus/pages/video/introduction/pgc/controller.dart';
 import 'package:PiliPlus/pages/video/introduction/ugc/controller.dart';
@@ -1557,6 +1558,84 @@ class VideoDetailController extends GetxController
     );
   }
 
+
+  /// Capture the current episode list without modifying local playback.
+  CastQueue _buildCastQueue(String currentTitle) {
+    final items = <CastQueueItem>[];
+    if (isUgc) {
+      try {
+        final detail = ugcIntroCtr.videoDetail.value;
+        if (detail.hasParts) {
+          for (final part in detail.pages!) {
+            if (part.cid case final int partCid) {
+              items.add(CastQueueItem(
+                cid: partCid,
+                objectId: aid,
+                playurlType: 1,
+                title: part.part ?? detail.title ?? currentTitle,
+                durationSeconds: part.duration,
+              ));
+            }
+          }
+        } else if (detail.ugcSeason?.sections case final sections?) {
+          for (final section in sections) {
+            for (final episode in section.episodes ?? <ugc.EpisodeItem>[]) {
+              final partCid = episode.cid;
+              final partAid = episode.aid;
+              if (partCid != null && partAid != null) {
+                items.add(CastQueueItem(
+                  cid: partCid,
+                  objectId: partAid,
+                  playurlType: 1,
+                  title: episode.title ?? detail.title ?? currentTitle,
+                ));
+              }
+            }
+          }
+        }
+      } catch (_) {
+        items.clear();
+      }
+    } else {
+      try {
+        for (final episode in pgcIntroCtr.episodes) {
+          final epCid = episode.cid;
+          final objectId = episode.epId ?? episode.id;
+          if (epCid != null && objectId != null) {
+            items.add(CastQueueItem(
+              cid: epCid,
+              objectId: objectId,
+              playurlType: 2,
+              title: episode.showTitle ?? episode.title ?? currentTitle,
+              durationSeconds: episode.duration == null
+                  ? null
+                  : (episode.duration! ~/ 1000),
+            ));
+          }
+        }
+      } catch (_) {
+        items.clear();
+      }
+    }
+    // Never start from the wrong episode if the playlist is still loading.
+    var index = items.indexWhere((item) => item.cid == cid.value);
+    if (index < 0) {
+      items.clear();
+      items.add(CastQueueItem(
+        cid: cid.value,
+        objectId: epId ?? aid,
+        playurlType: epId != null ? 2 : 1,
+        title: currentTitle,
+      ));
+      index = 0;
+    }
+    return CastQueue(
+      items: items,
+      initialIndex: index,
+      quality: currentVideoQa.value?.code,
+    );
+  }
+
   @pragma('vm:notify-debugger-on-exception')
   Future<void> onCast() async {
     SmartDialog.showLoading();
@@ -1595,7 +1674,9 @@ class VideoDetailController extends GetxController
         parameters: {
           'url': url,
           'title': ?title,
+          'format': ?response.format,
         },
+        arguments: _buildCastQueue(title ?? '视频'),
       );
     } else {
       res.toast();
