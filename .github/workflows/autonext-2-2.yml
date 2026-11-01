@@ -1,0 +1,40 @@
+name: PiliPlus 2.2 AutoNext Android APK
+
+on:
+  push:
+    branches:
+      - feature/2.2.0-dlna-autonext
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version-file: pubspec.yaml
+          cache: true
+      - name: Fetch and patch Flutter dependencies
+        shell: pwsh
+        run: lib/scripts/patch.ps1 android
+      - name: Generate build version
+        shell: pwsh
+        run: lib/scripts/build.ps1 android
+      - name: Build arm64 APK with isolated package
+        run: flutter build apk --release --target-platform android-arm64 --android-project-arg dev=1 --android-project-arg autoNextTest=1 --dart-define-from-file=pili_release.json --no-pub
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PiliPlus-2.2-AutoNext-arm64
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
