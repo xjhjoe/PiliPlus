@@ -39,6 +39,7 @@ class _DLNAPageState extends State<DLNAPage> {
   bool _polling = false;
   bool _isCasting = false;
   bool _autoNext = true;
+  bool _playlistExpanded = true;
   bool _isPlaying = false;
   bool _seenPlaying = false;
   int _stoppedTicks = 0;
@@ -46,6 +47,7 @@ class _DLNAPageState extends State<DLNAPage> {
   int _lastPosition = 0;
   int _duration = 0;
   int _currentIndex = 0;
+  int? _pendingIndex;
   int _session = 0;
   String? _lastDeviceKey;
   DLNADevice? _currentDevice;
@@ -239,6 +241,7 @@ class _DLNAPageState extends State<DLNAPage> {
     _positionTimer?.cancel();
     setState(() {
       _isCasting = true;
+      _pendingIndex = index;
       _stage = '准备投屏…';
       _castError = null;
       _isPlaying = false;
@@ -272,7 +275,10 @@ class _DLNAPageState extends State<DLNAPage> {
       }
     } finally {
       if (mounted && session == _session) {
-        setState(() => _isCasting = false);
+        setState(() {
+          _isCasting = false;
+          _pendingIndex = null;
+        });
       }
     }
   }
@@ -334,6 +340,35 @@ class _DLNAPageState extends State<DLNAPage> {
     } finally {
       _polling = false;
     }
+  }
+
+  /// Tap any episode to cast immediately, or select it before connecting a TV.
+  Future<void> _selectEpisode(int index) async {
+    if (!_hasQueue || _isCasting ||
+        index < 0 || index >= _queue!.items.length) {
+      return;
+    }
+    final device = _currentDevice;
+    if (device == null) {
+      setState(() {
+        _currentIndex = index;
+        _stage = '已选择第 ${index + 1} 集，请选择电视开始投屏';
+        _castError = null;
+      });
+      return;
+    }
+    await _playIndex(device, index);
+  }
+
+  String _episodeDuration(int? seconds) {
+    if (seconds == null || seconds <= 0) return '';
+    final duration = Duration(seconds: seconds);
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final remainder = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+    if (duration.inHours > 0) {
+      return '${duration.inHours}:$minutes:$remainder';
+    }
+    return '${duration.inMinutes}:$remainder';
   }
 
   Future<void> _changeEpisode(int delta) async {
@@ -445,8 +480,10 @@ class _DLNAPageState extends State<DLNAPage> {
         onReload: _onSearch,
       );
     }
-    return SliverList(
-      delegate: SliverChildListDelegate([
+    return SliverMainAxisGroup(
+      slivers: [
+        SliverList(
+          delegate: SliverChildListDelegate([
         if (_hasQueue)
           SwitchListTile(
             title: const Text('自动播放下一集'),
@@ -506,7 +543,99 @@ class _DLNAPageState extends State<DLNAPage> {
               _playIndex(entry.value, _currentIndex);
             },
           ),
-      ]),
+          ]),
+        ),
+        if (_hasQueue)
+          SliverToBoxAdapter(
+            child: ListTile(
+              leading: const Icon(Icons.playlist_play),
+              title: Text('播放列表 · ${_queue!.items.length} 集'),
+              subtitle: Text(
+                _currentDevice == null
+                    ? '先选剧集，再选择电视投屏'
+                    : '当前第 ${_currentIndex + 1} 集 · 点击任意一集切换',
+              ),
+              trailing: Icon(
+                _playlistExpanded ? Icons.expand_less : Icons.expand_more,
+              ),
+              onTap: () => setState(
+                () => _playlistExpanded = !_playlistExpanded,
+              ),
+            ),
+          ),
+        if (_hasQueue && _playlistExpanded)
+          SliverList.builder(
+            itemCount: _queue!.items.length,
+            itemBuilder: (context, index) {
+              final episode = _queue!.items[index];
+              final isCurrent = index == _currentIndex;
+              final isPending = _pendingIndex == index;
+              final duration = _episodeDuration(episode.durationSeconds);
+              final status = isPending
+                  ? '正在切换…'
+                  : isCurrent && _currentDevice != null
+                      ? (_isPlaying ? '正在投屏' : '当前选中')
+                      : isCurrent
+                          ? '当前选中 · 等待连接电视'
+                          : '';
+              final subtitle = [
+                if (status.isNotEmpty) status,
+                if (duration.isNotEmpty) duration,
+              ].join(' · ');
+              return ListTile(
+                key: ValueKey('cast-episode-${episode.playurlType}-${episode.objectId}-${episode.cid}'),
+                selected: isCurrent || isPending,
+                selectedTileColor: scheme.primaryContainer.withValues(alpha: 0.28),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 2,
+                ),
+                leading: CircleAvatar(
+                  radius: 17,
+                  backgroundColor: isCurrent || isPending
+                      ? scheme.primaryContainer
+                      : scheme.surfaceContainerHighest,
+                  child: isCurrent && _isPlaying
+                      ? Icon(
+                          Icons.graphic_eq,
+                          size: 18,
+                          color: scheme.onPrimaryContainer,
+                        )
+                      : Text(
+                          '${index + 1}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isCurrent || isPending
+                                ? scheme.onPrimaryContainer
+                                : scheme.onSurfaceVariant,
+                          ),
+                        ),
+                ),
+                title: Text(
+                  episode.title.trim().isEmpty
+                      ? '第 ${index + 1} 集'
+                      : episode.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                subtitle: subtitle.isEmpty ? null : Text(subtitle),
+                trailing: isPending
+                    ? const SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(
+                        isCurrent && _isPlaying
+                            ? Icons.volume_up
+                            : Icons.play_arrow_rounded,
+                        size: 21,
+                        color: isCurrent ? scheme.primary : null,
+                      ),
+                onTap: _isCasting ? null : () => _selectEpisode(index),
+              );
+            },
+          ),
+      ],
     );
   }
 }
