@@ -32,7 +32,7 @@ jobs:
         shell: pwsh
         run: lib/scripts/build.ps1 android
       - name: Build arm64 APK with isolated package
-        run: flutter build apk --release --target-platform android-arm64 --android-project-arg dev=1 --android-project-arg autoNextTest=1 --dart-define-from-file=pili_release.json --no-pub
+        run: flutter build apk --release --target-platform android-arm64 --android-project-arg dev=1 --android-project-arg playlistTest=1 --dart-define-from-file=pili_release.json --no-pub
       - uses: actions/upload-artifact@v4
         with:
           name: PiliPlus-2.2-AutoNext-arm64
@@ -43,7 +43,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp build/app/outputs/flutter-apk/app-release.apk PiliPlus-2.2-AutoNext-Playlist-arm64.apk
-          gh release create autonext-2.2.0-playlist-v2 \
+          gh release create autonext-2.2.0-playlist-v3 \
             PiliPlus-2.2-AutoNext-Playlist-arm64.apk \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
