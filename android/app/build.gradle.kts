@@ -66,11 +66,11 @@ android {
         }
         release {
             if (project.hasProperty("dev")) {
-                applicationIdSuffix = if (project.hasProperty("autoNextTest")) ".dev.autonext22" else ".dev"
+                applicationIdSuffix = if (project.hasProperty("playlistTest")) ".dev.autonextplaylist" else if (project.hasProperty("autoNextTest")) ".dev.autonext22" else ".dev"
                 resValue(
                     type = "string",
                     name = "app_name",
-                    value = if (project.hasProperty("autoNextTest")) "PiliPlus AutoNext 2.2" else "PiliPlus dev",
+                    value = if (project.hasProperty("playlistTest")) "PiliPlus Playlist" else if (project.hasProperty("autoNextTest")) "PiliPlus AutoNext 2.2" else "PiliPlus dev",
                 )
             }
             proguardFiles(
