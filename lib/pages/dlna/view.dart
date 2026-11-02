@@ -39,6 +39,7 @@ class _DLNAPageState extends State<DLNAPage> {
   bool _polling = false;
   bool _isCasting = false;
   bool _autoNext = true;
+  bool _playlistExpanded = true;
   bool _isPlaying = false;
   bool _seenPlaying = false;
   int _stoppedTicks = 0;
@@ -489,6 +490,60 @@ class _DLNAPageState extends State<DLNAPage> {
               ),
             ],
           ),
+        if (_hasQueue)
+          const Divider(height: 24),
+        if (_hasQueue)
+          ListTile(
+            leading: const Icon(Icons.playlist_play),
+            title: const Text('播放列表'),
+            subtitle: Text(
+              '共 ${_queue!.items.length} 集 · 当前第 ${_currentIndex + 1} 集',
+            ),
+            trailing: Icon(
+              _playlistExpanded ? Icons.expand_less : Icons.expand_more,
+            ),
+            onTap: () => setState(
+              () => _playlistExpanded = !_playlistExpanded,
+            ),
+          ),
+        if (_hasQueue && _playlistExpanded)
+          for (final (index, episode) in _queue!.items.indexed)
+            ListTile(
+              dense: true,
+              selected: index == _currentIndex,
+              leading: index == _currentIndex
+                  ? const Icon(Icons.equalizer)
+                  : SizedBox(
+                      width: 24,
+                      child: Center(child: Text('${index + 1}')),
+                    ),
+              title: Text(
+                episode.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: index == _currentIndex
+                  ? Text(_isCasting
+                      ? '正在切换…'
+                      : (_isPlaying ? '正在播放' : '当前选中'))
+                  : null,
+              trailing: index == _currentIndex
+                  ? const Icon(Icons.play_arrow)
+                  : null,
+              enabled: !_isCasting,
+              onTap: () {
+                if (_isCasting) return;
+                final device = _currentDevice;
+                if (device == null) {
+                  setState(() {
+                    _castError = '请先在下方选择电视设备，再点击剧集切换';
+                  });
+                  return;
+                }
+                if (index == _currentIndex && _isPlaying) return;
+                _playIndex(device, index);
+              },
+            ),
         if (_castError != null)
           ListTile(
             leading: const Icon(Icons.error_outline),
