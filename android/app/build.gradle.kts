@@ -74,11 +74,11 @@ android {
         }
         release {
             if (project.hasProperty("dev")) {
-                applicationIdSuffix = if (project.hasProperty("fixedSigning")) ".dev.autonextplaylist" else ".dev"
+                applicationIdSuffix = if (project.hasProperty("releaseCandidate")) ".dev.autonext222" else if (project.hasProperty("fixedSigning")) ".dev.autonextplaylist" else ".dev"
                 resValue(
                     type = "string",
                     name = "app_name",
-                    value = if (project.hasProperty("fixedSigning")) "PiliPlus Playlist" else "PiliPlus dev",
+                    value = if (project.hasProperty("releaseCandidate")) "PiliPlus AutoNext 2.2.0.2" else if (project.hasProperty("fixedSigning")) "PiliPlus Playlist" else "PiliPlus dev",
                 )
             }
             proguardFiles(
