@@ -62,15 +62,23 @@ android {
 
     buildTypes {
         all {
+            // Signed production builds use a keystore provided at build time.
+            // Never silently fall back to a new ephemeral CI debug signing key.
+            if (project.hasProperty("fixedSigning") && config == null) {
+                throw GradleException(
+                    "Fixed-signature AutoNext build requires android/key.properties and the release keystore. " +
+                    "Configure the signing secrets before publishing an APK."
+                )
+            }
             signingConfig = config ?: signingConfigs["debug"]
         }
         release {
             if (project.hasProperty("dev")) {
-                applicationIdSuffix = ".dev"
+                applicationIdSuffix = if (project.hasProperty("fixedSigning")) ".dev.autonextplaylist" else ".dev"
                 resValue(
                     type = "string",
                     name = "app_name",
-                    value = "PiliPlus dev",
+                    value = if (project.hasProperty("fixedSigning")) "PiliPlus Playlist" else "PiliPlus dev",
                 )
             }
             proguardFiles(
