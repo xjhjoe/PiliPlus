@@ -1,11 +1,9 @@
-name: Latest upstream AutoNext and Playlist APK
+name: November 5 AutoNext Playlist APK
 
 on:
   push:
     branches:
       - feature/20261105-autonext-upstream
-    paths:
-      - '.github/workflows/autonext-nov05.yml'
   workflow_dispatch:
 
 permissions:
