@@ -1,0 +1,58 @@
+name: PiliPlus November 5 standalone AutoNext APK
+
+on:
+  push:
+    branches:
+      - feature/20261105-autonext-upstream
+    paths:
+      - '.github/workflows/autonext-2-2-2-standalone.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version-file: pubspec.yaml
+          cache: true
+      - name: Apply project patches and fetch dependencies
+        shell: pwsh
+        run: lib/scripts/patch.ps1 android
+      - name: Set build version
+        shell: pwsh
+        run: lib/scripts/build.ps1 android
+      - name: Build isolated ARM64 APK
+        run: |
+          flutter build apk --release --target-platform android-arm64 \
+            --android-project-arg dev=1 \
+            --android-project-arg novemberTest=1 \
+            --dart-define-from-file=pili_release.json --no-pub
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PiliPlus-2.2.0.2-AutoNext-Standalone-arm64
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+      - name: Publish public direct-download APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          apk=PiliPlus-Nov05-AutoNext-Playlist-arm64.apk
+          cp build/app/outputs/flutter-apk/app-release.apk "$apk"
+          gh release create autonext-nov05-2026-v2 "$apk" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --title "PiliPlus November 5 AutoNext + Playlist" \
+            --prerelease \
+            --notes "Independent Android arm64 APK, based on upstream PiliPlus November 5 plus AutoNext, episode playlist, manual episode selection, and DLNA compatibility fallbacks. Package: com.example.piliplus.dev.autonextnov05. This build is signed with GitHub runner ephemeral debug credentials and is NOT eligible for a guaranteed in-place update. Future releases should use a securely backed-up persistent keystore."
