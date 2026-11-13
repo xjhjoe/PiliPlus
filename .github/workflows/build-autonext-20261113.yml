@@ -1,0 +1,56 @@
+name: PiliPlus latest upstream AutoNext APK
+
+on:
+  push:
+    branches:
+      - feature/20261113-autonext-playlist
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android-arm64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version-file: pubspec.yaml
+          cache: true
+      - name: Apply patches and restore dependencies
+        shell: pwsh
+        run: lib/scripts/patch.ps1 android
+      - name: Generate version
+        shell: pwsh
+        run: lib/scripts/build.ps1 android
+      - name: Build Android arm64 APK
+        run: |
+          flutter build apk --release --target-platform android-arm64 \
+            --android-project-arg dev=1 \
+            --android-project-arg autonextNov13=1 \
+            --dart-define-from-file=pili_release.json --no-pub
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PiliPlus-20261113-AutoNext-Playlist-arm64
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+      - name: Publish public APK after successful build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          apk=PiliPlus-20261113-AutoNext-Playlist-arm64.apk
+          cp build/app/outputs/flutter-apk/app-release.apk "$apk"
+          gh release create autonext-20261113-v1 "$apk" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${GITHUB_SHA}" \
+            --prerelease \
+            --title "PiliPlus 2026-11-13 AutoNext + Playlist" \
+            --notes "Unofficial Android ARM64 build on upstream main 9999f21d (2026-11-13), with AutoNext, episode playlist, DLNA fallbacks and cast-device-first UI. Independent package: com.example.piliplus.dev.autonextnov13. Signed with ephemeral GitHub CI debug signing, so in-place upgrades are not guaranteed. Back up settings before migrating."
