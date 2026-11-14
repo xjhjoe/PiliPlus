@@ -1,6 +1,11 @@
 name: Build LeftTopCast TV APK
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/build-lefttopcast-tv.yml'
   workflow_dispatch:
 
 permissions:
