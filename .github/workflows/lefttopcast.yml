@@ -1,0 +1,75 @@
+name: LeftTopCast DLNA TV APK
+
+on:
+  push:
+    branches:
+      - feature/lefttopcast-dlna-tv
+    paths:
+      - 'lefttopcast/**'
+      - '.github/workflows/lefttopcast.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'lefttopcast/**'
+      - '.github/workflows/lefttopcast.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout LeftTopCast modifications
+        uses: actions/checkout@v4
+
+      - name: Checkout upstream LeanCast receiver
+        uses: actions/checkout@v4
+        with:
+          repository: addozhang/leancast
+          ref: main
+          path: leancast
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Apply safe-area patch
+        run: python3 lefttopcast/apply.py
+
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+
+      - name: Build APK
+        working-directory: leancast
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleDebug --no-daemon
+
+      - name: Package APK
+        run: cp leancast/app/build/outputs/apk/debug/app-debug.apk LeftTopCast-TV-DLNA-v1.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: LeftTopCast-TV-DLNA-v1
+          path: LeftTopCast-TV-DLNA-v1.apk
+          if-no-files-found: error
+
+      - name: Publish direct APK download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create lefttopcast-tv-v1 LeftTopCast-TV-DLNA-v1.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "LeftTopCast TV - DLNA safe-area receiver v1" \
+            --notes "Android 5.0+ TV test build. Based on LeanCast (Apache-2.0). Configurable 40%-100% safe width and height, default 75% top-left. This APK only changes its own playback and receiver dashboard, not system-wide display. Debug signing; future installs may need uninstall if signature changes." \
+            --prerelease
