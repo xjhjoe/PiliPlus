@@ -7,6 +7,12 @@ on:
     paths:
       - 'lefttopcast/**'
       - '.github/workflows/lefttopcast.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'lefttopcast/**'
+      - '.github/workflows/lefttopcast.yml'
   workflow_dispatch:
 
 permissions:
