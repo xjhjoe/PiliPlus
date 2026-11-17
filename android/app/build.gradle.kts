@@ -66,11 +66,11 @@ android {
         }
         release {
             if (project.hasProperty("dev")) {
-                applicationIdSuffix = ".dev"
+                applicationIdSuffix = if (project.hasProperty("autonext221")) ".dev.autonext221" else ".dev"
                 resValue(
                     type = "string",
                     name = "app_name",
-                    value = "PiliPlus dev",
+                    value = if (project.hasProperty("autonext221")) "PiliPlus AutoNext 2.2.1" else "PiliPlus dev",
                 )
             }
             proguardFiles(
