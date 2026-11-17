@@ -1,0 +1,75 @@
+name: Build PiliPlus 2.2.1 AutoNext Playlist ARM64
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/autonext-2-2-2-standalone.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: piliplus-221-autonext-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Android ARM64 build and release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the 2.2.1 AutoNext source
+        uses: actions/checkout@v4
+        with:
+          ref: feature/20261114-2.2.1-autonext-playlist
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version-file: pubspec.yaml
+          cache: true
+
+      - name: Apply patches and restore dependencies
+        shell: pwsh
+        run: lib/scripts/patch.ps1 android
+
+      - name: Generate build version
+        shell: pwsh
+        run: lib/scripts/build.ps1 android
+
+      - name: Build ARM64 APK
+        run: |
+          flutter build apk --release --target-platform android-arm64 \
+            --android-project-arg dev=1 \
+            --android-project-arg autonext221=1 \
+            --dart-define-from-file=pili_release.json --no-pub
+
+      - name: Upload ARM64 build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PiliPlus-2.2.1-AutoNext-Playlist-arm64
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      - name: Publish public APK only after successful build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp build/app/outputs/flutter-apk/app-release.apk PiliPlus-2.2.1-AutoNext-Playlist-arm64.apk
+          gh release create autonext-2.2.1-playlist-v1 \
+            PiliPlus-2.2.1-AutoNext-Playlist-arm64.apk \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "$(git rev-parse HEAD)" \
+            --prerelease \
+            --title "PiliPlus 2.2.1 AutoNext + Playlist ARM64" \
+            --notes "Unofficial build from upstream 2.2.1 (Nov 14) with DLNA AutoNext and playlist. Devices above playlist. Separate application ID com.example.piliplus.dev.autonext221. CI debug signing may prevent in-place upgrades; back up app data before migrating."
